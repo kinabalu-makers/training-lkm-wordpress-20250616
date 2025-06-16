@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/windows/servercore/iis:ltsc2022
+FROM mcr.microsoft.com/windows/servercore/iis
 
 # Delete all default files in the IIS directory
 RUN powershell -Command "Remove-Item -Recurse C:\\inetpub\\wwwroot\\*"
