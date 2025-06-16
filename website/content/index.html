@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>What is Containerization and How it Works</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background: #f9f9f9; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; }
+        p { line-height: 1.6; }
+        ul { margin-left: 1.5em; }
+        .container { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>What is Containerization?</h1>
+        <p>
+            Containerization is a technology that packages an application and its dependencies into a single, lightweight unit called a container. Containers ensure that applications run consistently across different computing environments by isolating them from the underlying system.
+        </p>
+        <h2>How Does Containerization Work?</h2>
+        <p>
+            Containers use operating system-level virtualization to run multiple isolated applications on a single host. Each container includes the application code, libraries, and configuration files needed to run, but shares the host system's kernel.
+        </p>
+        <ul>
+            <li><strong>Isolation:</strong> Containers run independently, preventing conflicts between applications.</li>
+            <li><strong>Portability:</strong> Containers can be deployed on any system that supports container runtimes, such as Docker.</li>
+            <li><strong>Efficiency:</strong> Containers are lightweight and start quickly, using fewer resources than traditional virtual machines.</li>
+        </ul>
+        <p>
+            Popular containerization platforms include Docker and Kubernetes, which help manage and orchestrate containers at scale.
+        </p>
+    </div>
+</body>
+</html>
