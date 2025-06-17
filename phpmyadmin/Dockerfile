@@ -5,7 +5,7 @@
 # PHP 7.1 x64 running on IIS
 #
 
-FROM mcr.microsoft.com/windows/servercore/iis AS php71
+FROM mcr.microsoft.com/windows/servercore/iis AS php84
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
@@ -18,17 +18,17 @@ SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 RUN `
     try { `
         # Install PHP `
-        Invoke-WebRequest 'https://sourceforge.net/projects/phpinstallermsi/files/zip/php-7.1.7-nts-Win32-VC14-x64.zip/download' -UserAgent '' -OutFile C:\php.zip; `
-        Invoke-WebRequest 'https://download.microsoft.com/download/6/A/A/6AA4EDFF-645B-48C5-81CC-ED5963AEAD48/vc_redist.x64.exe' -UserAgent '' -OutFile C:\vc_redist-x64.exe; `
-        Invoke-WebRequest 'https://sourceforge.net/projects/wincache/files/wincache-2.0.0/wincachewpi-2.0.0.8-7.1-nts-vc14-x64.exe/download' -UserAgent '' -OutFile C:\php_wincache.exe; `
+        Invoke-WebRequest 'https://windows.php.net/downloads/releases/archives/php-8.4.3-nts-Win32-vs17-x64.zip' -UserAgent '' -OutFile C:\php.zip; `
+        Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -UserAgent '' -OutFile C:\vc_redist-x64.exe; `
+        # Invoke-WebRequest 'https://sourceforge.net/projects/wincache/files/wincache-2.0.0/wincachewpi-2.0.0.8-7.1-nts-vc14-x64.exe/download' -UserAgent '' -OutFile C:\php_wincache.exe; `
         Invoke-WebRequest 'https://files.phpmyadmin.net/phpMyAdmin/4.9.11/phpMyAdmin-4.9.11-all-languages.zip' -UserAgent '' -OutFile C:\phpmyadmin.zip; `
         Expand-Archive -Path php.zip -DestinationPath C:\PHP; `
         Expand-Archive -Path c:\phpmyadmin.zip -DestinationPath C:\phpmyadmin; `
         `
         # Install PHP Win Cache `
-        C:\php_wincache.exe /Q /C "/T:C:\php_wincache_msi"; `
-        Start-Process -FilePath msiexec -ArgumentList '/a C:\php_wincache_msi\wincache71x64wpi.msi /qb TARGETDIR=C:\php_wincache_msi\extracted' -NoNewWindow -PassThru -Wait; `
-        Copy-Item C:\php_wincache_msi\extracted\PFiles\php_wincache.dll c:\PHP\ext; `
+        # C:\php_wincache.exe /Q /C "/T:C:\php_wincache_msi"; `
+        # Start-Process -FilePath msiexec -ArgumentList '/a C:\php_wincache_msi\wincache71x64wpi.msi /qb TARGETDIR=C:\php_wincache_msi\extracted' -NoNewWindow -PassThru -Wait; `
+        # Copy-Item C:\php_wincache_msi\extracted\PFiles\php_wincache.dll c:\PHP\ext; `
         `
         # Configure PHP `
         Copy-Item C:\PHP\php.ini-production C:\PHP\php.ini; `
@@ -41,8 +41,8 @@ RUN `
 
 FROM mcr.microsoft.com/windows/servercore/iis
  
-COPY --from=php71 ["/php/", "/php/"]
-COPY --from=php71 ["/vc_redist-x64.exe", "/vc_redist-x64.exe"]
+COPY --from=php84 ["/php/", "/php/"]
+COPY --from=php84 ["/vc_redist-x64.exe", "/vc_redist-x64.exe"]
 
 #
 # Enable required IIS Features
@@ -63,10 +63,10 @@ RUN dism.exe /Online /Enable-Feature /FeatureName:IIS-CGI /All && `
     setx PHP /M "C:\PHP" && `
     del C:\inetpub\wwwroot\* /Q
 
-COPY --from=php71 ["/phpmyadmin/phpMyAdmin-4.9.11-all-languages/", "/inetpub/wwwroot/"]
+# COPY --from=php84 ["/phpmyadmin/phpMyAdmin-4.9.11-all-languages/", "/inetpub/wwwroot/"]
 COPY \php.ini C:\PHP\php.ini
 # Optional: Add a starter page
-# RUN powershell.exe -Command "'<?php phpinfo(); ?>' | Out-File C:\inetpub\wwwroot\index.php -Encoding UTF8"
+RUN powershell.exe -Command "'<?php phpinfo(); ?>' | Out-File C:\inetpub\wwwroot\index.php -Encoding UTF8"
 
 EXPOSE 80
 #
