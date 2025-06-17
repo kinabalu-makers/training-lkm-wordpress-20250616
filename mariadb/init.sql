@@ -1,3 +1,3 @@
-CREATE USER 'admin'@'%' IDENTIFIED BY 'admin';
+CREATE USER 'admin'@'%' IDENTIFIED BY 'securepassword';
 GRANT ALL PRIVILEGES ON *.* TO 'admin'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
