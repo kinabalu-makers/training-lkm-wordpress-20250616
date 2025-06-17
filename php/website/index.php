@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h1>Welcome to PHP in a Container!</h1>
+    <h1>Welcome to PHP in a Windows Server Container!</h1>
     <p>
         This page is served by PHP running inside a containerized environment, such as Docker.
     </p>

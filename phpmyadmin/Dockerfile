@@ -1,47 +1,73 @@
-# Use the official Windows Server Core with IIS image
+# escape=`
+
+#
+# This Dockerfile is provided for demonstration purposes only and it is not supported by Microsoft
+# PHP 7.1 x64 running on IIS
+#
+
+FROM mcr.microsoft.com/windows/servercore/iis AS php71
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
+
+# WORKDIR C:\
+
+# COPY /php/ C:\php\
+
+# RUN ls
+
+RUN `
+    try { `
+        # Install PHP `
+        Invoke-WebRequest 'https://sourceforge.net/projects/phpinstallermsi/files/zip/php-7.1.7-nts-Win32-VC14-x64.zip/download' -UserAgent '' -OutFile C:\php.zip; `
+        Invoke-WebRequest 'https://download.microsoft.com/download/6/A/A/6AA4EDFF-645B-48C5-81CC-ED5963AEAD48/vc_redist.x64.exe' -UserAgent '' -OutFile C:\vc_redist-x64.exe; `
+        Invoke-WebRequest 'https://sourceforge.net/projects/wincache/files/wincache-2.0.0/wincachewpi-2.0.0.8-7.1-nts-vc14-x64.exe/download' -UserAgent '' -OutFile C:\php_wincache.exe; `
+        Invoke-WebRequest 'https://files.phpmyadmin.net/phpMyAdmin/4.9.11/phpMyAdmin-4.9.11-all-languages.zip' -UserAgent '' -OutFile C:\phpmyadmin.zip; `
+        Expand-Archive -Path php.zip -DestinationPath C:\PHP; `
+        Expand-Archive -Path c:\phpmyadmin.zip -DestinationPath C:\phpmyadmin; `
+        `
+        # Install PHP Win Cache `
+        C:\php_wincache.exe /Q /C "/T:C:\php_wincache_msi"; `
+        Start-Process -FilePath msiexec -ArgumentList '/a C:\php_wincache_msi\wincache71x64wpi.msi /qb TARGETDIR=C:\php_wincache_msi\extracted' -NoNewWindow -PassThru -Wait; `
+        Copy-Item C:\php_wincache_msi\extracted\PFiles\php_wincache.dll c:\PHP\ext; `
+        `
+        # Configure PHP `
+        Copy-Item C:\PHP\php.ini-production C:\PHP\php.ini; `
+    } `
+    catch { `
+        $_.Exception; `
+        $_; `
+        exit 1; `
+    }
+
 FROM mcr.microsoft.com/windows/servercore/iis
+ 
+COPY --from=php71 ["/php/", "/php/"]
+COPY --from=php71 ["/vc_redist-x64.exe", "/vc_redist-x64.exe"]
 
-# Set environment variables
-ENV PHPMYADMIN_VERSION=5.2.2
-ENV PHPMYADMIN_SHA256=6e7e6e3e2b6e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e6e2e
+#
+# Enable required IIS Features
+# Install VC Redist 14
+# Configure IIS
+# Configure system PATH
+#
+RUN dism.exe /Online /Enable-Feature /FeatureName:IIS-CGI /All && `
+    C:\vc_redist-x64.exe /quiet /install && `
+    del C:\vc_redist-x64.exe && `
+    %windir%\system32\inetsrv\appcmd.exe set config /section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'] && `
+    %windir%\system32\inetsrv\appcmd.exe set config /section:system.webServer/handlers /+[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='c:\PHP\php-cgi.exe',resourceType='Either'] && `
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /[fullPath='c:\PHP\php-cgi.exe'].instanceMaxRequests:10000 && `
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'].environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000'] && `
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'].environmentVariables.[name='PHPRC',value='C:\PHP'] && `
+    %windir%\system32\inetsrv\appcmd.exe set config /section:defaultDocument /enabled:true /+files.[value='index.php'] && `
+    setx PATH /M %PATH%;C:\PHP && `
+    setx PHP /M "C:\PHP" && `
+    del C:\inetpub\wwwroot\* /Q
 
-# Install PHP
-RUN powershell -Command "\
-    Invoke-WebRequest -Uri https://windows.php.net/downloads/releases/php-8.2.19-nts-Win32-vs16-x64.zip -OutFile php.zip; \
-    Expand-Archive php.zip -DestinationPath C:\php; \
-    Remove-Item php.zip"
+COPY --from=php71 ["/phpmyadmin/phpMyAdmin-4.9.11-all-languages/", "/inetpub/wwwroot/"]
+COPY \php.ini C:\PHP\php.ini
+# Optional: Add a starter page
+# RUN powershell.exe -Command "'<?php phpinfo(); ?>' | Out-File C:\inetpub\wwwroot\index.php -Encoding UTF8"
 
-# Add PHP to PATH
-ENV PATH="C:\\php;${PATH}"
-
-# Configure PHP in IIS
-RUN powershell -Command "\
-    Import-Module WebAdministration; \
-    New-Item -Path IIS:\AppPools\PHPAppPool; \
-    Set-ItemProperty IIS:\AppPools\PHPAppPool -Name 'managedRuntimeVersion' -Value ''; \
-    New-Item -Path IIS:\Sites\Default Web Site\phpmyadmin -Type Application -PhysicalPath C:\inetpub\wwwroot\phpmyadmin -ApplicationPool PHPAppPool"
-
-# Download and extract phpMyAdmin
-RUN powershell -Command "\
-    Invoke-WebRequest -Uri https://files.phpmyadmin.net/phpMyAdmin/${env:PHPMYADMIN_VERSION}/phpMyAdmin-${env:PHPMYADMIN_VERSION}-all-languages.zip -OutFile phpmyadmin.zip; \
-    if ((Get-FileHash phpmyadmin.zip -Algorithm SHA256).Hash -ne $env:PHPMYADMIN_SHA256) { throw 'SHA256 mismatch for phpMyAdmin download.' }; \
-    Expand-Archive phpmyadmin.zip -DestinationPath C:\inetpub\wwwroot\; \
-    Move-Item C:\inetpub\wwwroot\phpMyAdmin-${env:PHPMYADMIN_VERSION}-all-languages C:\inetpub\wwwroot\phpmyadmin; \
-    Remove-Item phpmyadmin.zip"
-
-# Configure PHP in IIS (add handler mapping)
-RUN powershell -Command "\
-    Import-Module WebAdministration; \
-    Set-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter 'system.webServer/handlers' -name '.' -value @{name='PHP_via_FastCGI';path='*.php';verb='*';modules='FastCgiModule';scriptProcessor='C:\php\php-cgi.exe';resourceType='Either'} -location 'Default Web Site/phpmyadmin'; \
-    Set-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter 'system.webServer/fastCgi/application' -name '.' -value @{fullPath='C:\php\php-cgi.exe';arguments=''} -location 'Default Web Site/phpmyadmin'"
-
-# Set the default document for phpMyAdmin
-RUN powershell -Command "\
-    Set-ItemProperty -Path 'IIS:\Sites\Default Web Site\phpmyadmin' -Name 'defaultDocument' -Value 'index.php'; \
-    Set-ItemProperty -Path 'IIS:\Sites\Default Web Site\phpmyadmin' -Name 'physicalPath' -Value 'C:\inetpub\wwwroot\phpmyadmin'"
-
-# Set the working directory
-WORKDIR C:\inetpub\wwwroot\phpmyadmin
-
-# Expose port 80
 EXPOSE 80
+#
+#ADD any application content and perform any configuration below

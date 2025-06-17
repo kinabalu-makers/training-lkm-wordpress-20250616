@@ -1,0 +1,12 @@
+services:
+  app:
+    image: local/php:latest
+    container_name: cnt-php
+    ports:
+      - "8080:80"
+    # volumes:
+    #   - "./content:C:\\inetpub\\wwwroot"
+
+networks:
+  default:
+    name: localnet
