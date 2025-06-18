@@ -1,6 +1,6 @@
 services:
   db:
-    image: local/mariadb-nano
+    image: local/mariadb
     container_name: cnt-db
     restart: unless-stopped
     ports:
@@ -13,7 +13,7 @@ services:
 
   
   phpmyadmin:
-    image: local/pma
+    image: local/phpmyadmin
     container_name: cnt-pma
     restart: unless-stopped
     ports:
