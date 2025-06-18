@@ -93,13 +93,12 @@ RUN powershell -Command \
     \
     # Verify PHP CGI exists \
     if (!(Test-Path \"%PHP_DIR%\php-cgi.exe\")) { Write-Error 'PHP CGI not found'; exit 1 };
-    # Configure PHP handler with corrected syntax
-    # Configure PHP handler using appcmd (more reliable in containers) \
 
-RUN powershell -Command \
-    Start-Process -FilePath "$env:windir\system32\inetsrv\appcmd.exe" -ArgumentList "set config -section:system.webServer/fastCgi /+`"[fullPath='$env:PHP_DIR\php-cgi.exe',arguments='',maxInstances='4',instanceMaxRequests='10000',activityTimeout='600',requestTimeout='600',queueLength='1000']`" /commit:apphost" -Wait -NoNewWindow; \
-    Start-Process -FilePath "$env:windir\system32\inetsrv\appcmd.exe" -ArgumentList "set config -section:system.webServer/fastCgi /`"[fullPath='$env:PHP_DIR\php-cgi.exe']`".environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000'] /commit:apphost" -Wait -NoNewWindow; \
-    Start-Process -FilePath "$env:windir\system32\inetsrv\appcmd.exe" -ArgumentList "set config -section:system.webServer/handlers /+`"[name='PHP-FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='$env:PHP_DIR\php-cgi.exe',resourceType='Either']`" /commit:apphost" -Wait -NoNewWindow
+RUN \
+    # Configure PHP handler using direct appcmd execution \
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.webServer/fastCgi /+"[fullPath='$env:PHP_DIR\php-cgi.exe',arguments='',maxInstances='4',instanceMaxRequests='10000',activityTimeout='600',requestTimeout='600',queueLength='1000']" /commit:apphost; \
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.webServer/fastCgi /"[fullPath='$env:PHP_DIR\php-cgi.exe']".environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000'] /commit:apphost; \
+    & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.webServer/handlers /+"[name='PHP-FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='$env:PHP_DIR\php-cgi.exe',resourceType='Either']" /commit:apphost
 
 # Expose port 80
 EXPOSE 80
