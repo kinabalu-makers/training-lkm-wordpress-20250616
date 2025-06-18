@@ -2,14 +2,14 @@
 FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Metadata
-LABEL maintainer="Your Name <your.email@example.com>"
+LABEL maintainer="Kinabalu Makers <dev@kinabalumakers.com>"
 LABEL description="WordPress on Windows Server Core 2022"
 
 # Set environment variables
 ENV WORDPRESS_VERSION=6.5.3
 ENV PHP_VERSION=8.2.12
 ENV PHP_DIR=C:\php
-ENV WORDPRESS_ROOT=C:\inetpub\wwwroot\wordpress
+ENV WORDPRESS_ROOT='C:\inetpub\wwwroot\wordpress'
 
 # Install Chocolatey
 RUN powershell -Command \
@@ -68,17 +68,7 @@ RUN powershell -Command \
             New-Item -ItemType Directory -Path $fullPath ; \
             if (!(Test-Path $fullPath)) { Write-Error \"Failed to create directory: $fullPath\"; exit 1 } \
         } \
-    }; \
-    \
-    # Set permissions \
-    $acl = Get-Acl %WORDPRESS_ROOT%; \
-    $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule('IIS_IUSRS','FullControl','ContainerInherit,ObjectInherit','None','Allow'); \
-    $acl.SetAccessRule($accessRule); \
-    Set-Acl %WORDPRESS_ROOT% $acl; \
-    Set-Acl \"%WORDPRESS_ROOT%\wp-content\" $acl; \
-    Set-Acl \"%WORDPRESS_ROOT%\wp-content\uploads\" $acl; \
-    Set-Acl \"%WORDPRESS_ROOT%\wp-content\plugins\" $acl; \
-    Set-Acl \"%WORDPRESS_ROOT%\wp-content\themes\" $acl
+    };
 
 # Install and configure IIS with corrected syntax
 RUN powershell -Command \
@@ -95,9 +85,22 @@ RUN powershell -Command \
     if (!(Test-Path \"%PHP_DIR%\php-cgi.exe\")) { Write-Error 'PHP CGI not found'; exit 1 };
     
 # Configure PHP handler using direct appcmd execution \
-RUN %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+[fullPath='$env:PHP_DIR\php-cgi.exe',arguments='',maxInstances='4',instanceMaxRequests='10000',activityTimeout='600',requestTimeout='600',queueLength='1000']; \
-    && %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /[fullPath='$env:PHP_DIR\php-cgi.exe'].environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000']; \
-    && %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/handlers /+[name='PHP-FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='$env:PHP_DIR\php-cgi.exe',resourceType='Either']
+RUN %windir%\system32\inetsrv\appcmd.exe set config /section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'] && \
+    %windir%\system32\inetsrv\appcmd.exe set config /section:system.webServer/handlers /+[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='c:\PHP\php-cgi.exe',resourceType='Either'] && \
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /[fullPath='c:\PHP\php-cgi.exe'].instanceMaxRequests:10000 && \
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'].environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000'] && \
+    %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+[fullPath='c:\PHP\php-cgi.exe'].environmentVariables.[name='PHPRC',value='C:\PHP'] && \
+    %windir%\system32\inetsrv\appcmd.exe set config /section:defaultDocument /enabled:true /+files.[value='index.php']
+
+# Set permissions 
+RUN $acl = Get-Acl %WORDPRESS_ROOT%; \
+    $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule('IIS_IUSRS','FullControl','ContainerInherit,ObjectInherit','None','Allow'); \
+    $acl.SetAccessRule($accessRule); \
+    Set-Acl %WORDPRESS_ROOT% $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\uploads\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\plugins\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\themes\" $acl
 
 # Expose port 80
 EXPOSE 80
@@ -112,4 +115,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
         } catch { exit 1 }
 
 # Start IIS
-CMD ["C:\\ServiceMonitor.exe", "w3svc"]
+CMD ["cmd", "/c", "start /w w3svc"]
