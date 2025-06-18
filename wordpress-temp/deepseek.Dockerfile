@@ -8,6 +8,7 @@ LABEL description="WordPress on Windows Server Core 2022"
 # Set environment variables
 ENV WORDPRESS_VERSION=6.5.3
 ENV PHP_VERSION=8.2.12
+ENV PHP_DIR=C:\php
 
 # Install Chocolatey
 RUN powershell -Command \
@@ -15,22 +16,21 @@ RUN powershell -Command \
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; \
     iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 
-# Install PHP and dependencies
+# Install PHP and dependencies with explicit installation directory
 RUN powershell -Command \
-    choco install -y php --version $env:PHP_VERSION --params '"/InstallDir:C:\php"'; \
+    choco install -y php --version $env:PHP_VERSION --params '\"/InstallDir:$env:PHP_DIR\"'; \
     choco install -y wget; \
     choco install -y unzip; \
     choco install -y vcredist-all
 
-# Configure PHP
+# Configure PHP (using known installation path)
 RUN powershell -Command \
-    # Find the actual PHP installation directory \
-    $phpDir = (Get-Command php).Source | Split-Path -Parent; \
-    Write-Host "PHP directory found at: $phpDir"; \
+    # Verify PHP directory exists \
+    if (-not (Test-Path $env:PHP_DIR)) { throw \"PHP directory not found at $env:PHP_DIR\" }; \
     # Copy production ini to development ini \
-    Copy-Item $phpDir\php.ini-production $phpDir\php.ini; \
+    Copy-Item $env:PHP_DIR\php.ini-production $env:PHP_DIR\php.ini; \
     # Get content, modify it, then output to file \
-    $phpIni = Get-Content $phpDir\php.ini; \
+    $phpIni = Get-Content $env:PHP_DIR\php.ini; \
     $phpIni = $phpIni -replace ';extension=curl', 'extension=curl'; \
     $phpIni = $phpIni -replace ';extension=fileinfo', 'extension=fileinfo'; \
     $phpIni = $phpIni -replace ';extension=mbstring', 'extension=mbstring'; \
@@ -48,12 +48,12 @@ RUN powershell -Command \
     $phpIni = $phpIni -replace 'max_execution_time = 30', 'max_execution_time = 300'; \
     $phpIni = $phpIni -replace 'memory_limit = 128M', 'memory_limit = 256M'; \
     # Write the modified content back to the file \
-    [System.IO.File]::WriteAllText("$phpDir\php.ini", $phpIni)
+    [System.IO.File]::WriteAllText(\"$env:PHP_DIR\php.ini\", $phpIni)
 
 # Download and install WordPress
 RUN powershell -Command \
     $ErrorActionPreference = 'Stop'; \
-    Invoke-WebRequest -Uri "https://wordpress.org/wordpress-$env:WORDPRESS_VERSION.zip" -OutFile wordpress.zip; \
+    Invoke-WebRequest -Uri \"https://wordpress.org/wordpress-$env:WORDPRESS_VERSION.zip\" -OutFile wordpress.zip; \
     Expand-Archive -Path wordpress.zip -DestinationPath C:\; \
     Remove-Item wordpress.zip; \
     Move-Item -Path C:\wordpress -Destination C:\inetpub\wwwroot; \
@@ -74,10 +74,9 @@ RUN powershell -Command \
     Install-WindowsFeature Web-Asp-Net45; \
     Remove-Website -Name 'Default Web Site'; \
     New-Website -Name 'WordPress' -Port 80 -PhysicalPath 'C:\inetpub\wwwroot\wordpress' -ApplicationPool '.NET v4.5'; \
-    $phpDir = (Get-Command php).Source | Split-Path -Parent; \
-    New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor "$phpDir\php-cgi.exe" -ResourceType 'File'; \
-    Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'="$phpDir\php-cgi.exe";'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
-    Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath=""$phpDir\php-cgi.exe""]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
+    New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor \"$env:PHP_DIR\php-cgi.exe\" -ResourceType 'File'; \
+    Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'=\"$env:PHP_DIR\php-cgi.exe\";'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
+    Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath=\"""$env:PHP_DIR\php-cgi.exe\""]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
 
 # Expose port 80
 EXPOSE 80
