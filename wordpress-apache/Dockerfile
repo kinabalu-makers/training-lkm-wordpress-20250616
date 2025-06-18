@@ -2,9 +2,9 @@
 FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Set environment variables
-ENV APACHE_VERSION 2.4.58
+ENV APACHE_VERSION 2.4.63-250207
 ENV PHP_VERSION 8.2.8
-ENV WORDPRESS_VERSION 6.4.3
+ENV WORDPRESS_VERSION 6.6.2
 
 # Set the working directory
 WORKDIR C:\Setup
@@ -34,24 +34,24 @@ RUN powershell -Command \
     Expand-Archive -Path "php.zip" -DestinationPath "C:\php"; \
     Remove-Item -Path "php.zip"
 
-# Download and install WordPress
+# Download and install WordPress into htdocs
 RUN powershell -Command \
     $ProgressPreference = 'SilentlyContinue'; \
     Invoke-WebRequest -Uri "https://wordpress.org/wordpress-%WORDPRESS_VERSION%.zip" -OutFile "wordpress.zip"; \
-    Expand-Archive -Path "wordpress.zip" -DestinationPath "C:\"; \
+    Expand-Archive -Path "wordpress.zip" -DestinationPath "C:\Apache\htdocs"; \
     Remove-Item -Path "wordpress.zip"
 
-# Create directories and set permissions
+# Create WordPress directories and set permissions
 RUN powershell -Command \
-    New-Item -ItemType Directory -Path "C:\wordpress\wp-content\uploads" -Force; \
-    New-Item -ItemType Directory -Path "C:\wordpress\wp-content\plugins" -Force; \
-    New-Item -ItemType Directory -Path "C:\wordpress\wp-content\themes" -Force; \
-    icacls "C:\wordpress" /grant "Everyone:(OI)(CI)F" /T
+    New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\uploads" -Force; \
+    New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\plugins" -Force; \
+    New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\themes" -Force; \
+    icacls "C:\Apache\htdocs\wordpress" /grant "Everyone:(OI)(CI)F" /T
 
 # Copy configuration files
 COPY httpd.conf C:/Apache/conf/httpd.conf
 COPY php.ini C:/php/php.ini
-COPY wp-config.php C:/wordpress/wp-config.php
+COPY wp-config.php C:/Apache/htdocs/wordpress/wp-config.php
 
 # Expose port 8080
 EXPOSE 8080
