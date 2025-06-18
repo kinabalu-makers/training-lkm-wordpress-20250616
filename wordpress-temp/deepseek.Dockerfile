@@ -17,17 +17,20 @@ RUN powershell -Command \
 
 # Install PHP and dependencies
 RUN powershell -Command \
-    choco install -y php --version $env:PHP_VERSION; \
+    choco install -y php --version $env:PHP_VERSION --params '"/InstallDir:C:\php"'; \
     choco install -y wget; \
     choco install -y unzip; \
     choco install -y vcredist-all
 
 # Configure PHP
 RUN powershell -Command \
+    # Find the actual PHP installation directory \
+    $phpDir = (Get-Command php).Source | Split-Path -Parent; \
+    Write-Host "PHP directory found at: $phpDir"; \
     # Copy production ini to development ini \
-    Copy-Item C:\tools\php\php.ini-production C:\tools\php\php.ini; \
+    Copy-Item $phpDir\php.ini-production $phpDir\php.ini; \
     # Get content, modify it, then output to file \
-    $phpIni = Get-Content C:\tools\php\php.ini; \
+    $phpIni = Get-Content $phpDir\php.ini; \
     $phpIni = $phpIni -replace ';extension=curl', 'extension=curl'; \
     $phpIni = $phpIni -replace ';extension=fileinfo', 'extension=fileinfo'; \
     $phpIni = $phpIni -replace ';extension=mbstring', 'extension=mbstring'; \
@@ -45,7 +48,7 @@ RUN powershell -Command \
     $phpIni = $phpIni -replace 'max_execution_time = 30', 'max_execution_time = 300'; \
     $phpIni = $phpIni -replace 'memory_limit = 128M', 'memory_limit = 256M'; \
     # Write the modified content back to the file \
-    [System.IO.File]::WriteAllText('C:\tools\php\php.ini', $phpIni)
+    [System.IO.File]::WriteAllText("$phpDir\php.ini", $phpIni)
 
 # Download and install WordPress
 RUN powershell -Command \
@@ -71,9 +74,10 @@ RUN powershell -Command \
     Install-WindowsFeature Web-Asp-Net45; \
     Remove-Website -Name 'Default Web Site'; \
     New-Website -Name 'WordPress' -Port 80 -PhysicalPath 'C:\inetpub\wwwroot\wordpress' -ApplicationPool '.NET v4.5'; \
-    New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor 'C:\tools\php\php-cgi.exe' -ResourceType 'File'; \
-    Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'='C:\tools\php\php-cgi.exe';'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
-    Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath="C:\tools\php\php-cgi.exe"]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
+    $phpDir = (Get-Command php).Source | Split-Path -Parent; \
+    New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor "$phpDir\php-cgi.exe" -ResourceType 'File'; \
+    Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'="$phpDir\php-cgi.exe";'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
+    Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath=""$phpDir\php-cgi.exe""]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
 
 # Expose port 80
 EXPOSE 80
