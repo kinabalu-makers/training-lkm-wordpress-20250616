@@ -9,6 +9,7 @@ LABEL description="WordPress on Windows Server Core 2022"
 ENV WORDPRESS_VERSION=6.5.3
 ENV PHP_VERSION=8.2.12
 ENV PHP_DIR=C:\php
+ENV WORDPRESS_ROOT=C:\inetpub\wwwroot\wordpress
 
 # Install Chocolatey
 RUN powershell -Command \
@@ -23,9 +24,9 @@ RUN powershell -Command \
     choco install -y unzip; \
     choco install -y vcredist-all
 
-# Configure PHP using basic replacement method
+# Configure PHP
 RUN powershell -Command \
-    if (!(Test-Path %PHP_DIR%)) { exit 1 }; \
+    if (!(Test-Path %PHP_DIR%)) { Write-Error 'PHP directory not found'; exit 1 }; \
     Copy-Item %PHP_DIR%\php.ini-production %PHP_DIR%\php.ini; \
     $content = [System.IO.File]::ReadAllText('%PHP_DIR%\php.ini'); \
     $content = $content -replace ';extension=curl', 'extension=curl'; \
@@ -46,21 +47,38 @@ RUN powershell -Command \
     $content = $content -replace 'memory_limit = 128M', 'memory_limit = 256M'; \
     [System.IO.File]::WriteAllText('%PHP_DIR%\php.ini', $content)
 
-# Download and install WordPress
+# Download and install WordPress with directory validation
 RUN powershell -Command \
+    # Download and extract WordPress \
     Invoke-WebRequest -Uri \"https://wordpress.org/wordpress-%WORDPRESS_VERSION%.zip\" -OutFile wordpress.zip; \
+    if (!(Test-Path wordpress.zip)) { Write-Error 'WordPress download failed'; exit 1 }; \
     Expand-Archive -Path wordpress.zip -DestinationPath C:\; \
     Remove-Item wordpress.zip; \
-    Move-Item -Path C:\wordpress -Destination C:\inetpub\wwwroot; \
-    New-Item -ItemType Directory -Path C:\inetpub\wwwroot\wordpress\wp-content\uploads; \
-    $acl = Get-Acl C:\inetpub\wwwroot\wordpress; \
+    \
+    # Verify WordPress extraction \
+    if (!(Test-Path C:\wordpress)) { Write-Error 'WordPress extraction failed'; exit 1 }; \
+    Move-Item -Path C:\wordpress -Destination %WORDPRESS_ROOT%; \
+    \
+    # Create required directories if they don't exist \
+    $requiredDirs = @('\wp-content', '\wp-content\uploads', '\wp-content\plugins', '\wp-content\themes'); \
+    foreach ($dir in $requiredDirs) { \
+        $fullPath = \"%WORDPRESS_ROOT%$dir\"; \
+        if (!(Test-Path $fullPath)) { \
+            Write-Host \"Creating directory: $fullPath\"; \
+            New-Item -ItemType Directory -Path $fullPath | Out-Null; \
+            if (!(Test-Path $fullPath)) { Write-Error \"Failed to create directory: $fullPath\"; exit 1 } \
+        } \
+    }; \
+    \
+    # Set permissions \
+    $acl = Get-Acl %WORDPRESS_ROOT%; \
     $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule('IIS_IUSRS','FullControl','ContainerInherit,ObjectInherit','None','Allow'); \
     $acl.SetAccessRule($accessRule); \
-    Set-Acl C:\inetpub\wwwroot\wordpress $acl; \
-    Set-Acl C:\inetpub\wwwroot\wordpress\wp-content $acl; \
-    Set-Acl C:\inetpub\wwwroot\wordpress\wp-content\uploads $acl; \
-    Set-Acl C:\inetpub\wwwroot\wordpress\wp-content\plugins $acl; \
-    Set-Acl C:\inetpub\wwwroot\wordpress\wp-content\themes $acl
+    Set-Acl %WORDPRESS_ROOT% $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\uploads\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\plugins\" $acl; \
+    Set-Acl \"%WORDPRESS_ROOT%\wp-content\themes\" $acl
 
 # Install and configure IIS
 RUN powershell -Command \
@@ -68,7 +86,8 @@ RUN powershell -Command \
     Install-WindowsFeature Web-Mgmt-Tools; \
     Install-WindowsFeature Web-Asp-Net45; \
     Remove-Website -Name 'Default Web Site'; \
-    New-Website -Name 'WordPress' -Port 80 -PhysicalPath 'C:\inetpub\wwwroot\wordpress' -ApplicationPool '.NET v4.5'; \
+    New-Website -Name 'WordPress' -Port 80 -PhysicalPath '%WORDPRESS_ROOT%' -ApplicationPool '.NET v4.5'; \
+    if (!(Test-Path \"%PHP_DIR%\php-cgi.exe\")) { Write-Error 'PHP CGI not found'; exit 1 }; \
     New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor \"%PHP_DIR%\php-cgi.exe\" -ResourceType 'File'; \
     Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'=\"%PHP_DIR%\php-cgi.exe\";'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
     Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath=\"\"%PHP_DIR%\php-cgi.exe\"\"]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
