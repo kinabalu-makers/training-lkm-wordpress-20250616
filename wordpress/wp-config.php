@@ -85,11 +85,16 @@ $table_prefix = 'wp_';
  *
  * @link https://developer.wordpress.org/advanced-administration/debug/debug-wordpress/
  */
-define( 'WP_DEBUG', false );
+define('FS_METHOD', 'direct');
+define('WP_DEBUG', true);
+define('WP_DEBUG_LOG', true);
+define('WP_DEBUG_DISPLAY', false);
+
 
 /* Add any custom values between this line and the "stop editing" line. */
 
-
+define('WP_MEMORY_LIMIT', '1024M');
+define('WP_MAX_MEMORY_LIMIT', '2048M');
 
 /* That's all, stop editing! Happy publishing. */
 

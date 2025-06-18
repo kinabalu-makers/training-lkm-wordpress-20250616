@@ -23,16 +23,14 @@ RUN Expand-Archive -Path c:\php.zip -DestinationPath C:\PHP
 # Install VC Redistributable
 RUN Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -UserAgent '' -OutFile 'C:\vc_redist-x64.exe'
 
-RUN Invoke-WebRequest 'https://wordpress.org/latest.zip' -UserAgent '' -OutFile C:\wordpress.zip
+RUN Invoke-WebRequest 'https://wordpress.org/wordpress-6.8.zip' -UserAgent '' -OutFile C:\wordpress.zip
 RUN Expand-Archive -Path c:\wordpress.zip -DestinationPath C:\wordpress
 
 
-FROM mcr.microsoft.com/windows/servercore/iis
+FROM mcr.microsoft.com/windows/server:ltsc2022
  
 COPY --from=php84 ["/php/", "/php/"]
 COPY --from=php84 ["/vc_redist-x64.exe", "/vc_redist-x64.exe"]
-
-RUN powershell -Command "Invoke-WebRequest -Uri 'https://downloads.mariadb.org/rest-api/mariadb/10.6.22/16590' -OutFile mariadb.msi; Start-Process -FilePath msiexec.exe -ArgumentList '/i mariadb.msi /quiet /norestart' -NoNewWindow -Wait"
 
 #
 # Enable required IIS Features
@@ -40,6 +38,10 @@ RUN powershell -Command "Invoke-WebRequest -Uri 'https://downloads.mariadb.org/r
 # Configure IIS
 # Configure system PATH
 #
+RUN powershell -Command `
+    Install-WindowsFeature Web-Server, Web-CGI, Web-Mgmt-Console; `
+    Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets
+
 RUN dism.exe /Online /Enable-Feature /FeatureName:IIS-CGI /All && `
     C:\vc_redist-x64.exe /quiet /install && `
     del C:\vc_redist-x64.exe && `
@@ -53,13 +55,33 @@ RUN dism.exe /Online /Enable-Feature /FeatureName:IIS-CGI /All && `
     setx PHP /M "C:\PHP" && `
     del C:\inetpub\wwwroot\* /Q
 
-COPY --from=php84 ["/wordpress/wordpress", "/inetpub/wwwroot/"]
+RUN dism /online /enable-feature /featurename:ServerMediaFoundation /all /NoRestart
+
+COPY --from=php84 ["/wordpress/wordpress", "/inetpub/wwwroot/wordpress"]
 COPY \php.ini C:\PHP\php.ini
-COPY wp-config.php C:\inetpub\wwwroot\wp-config.php
+COPY wp-config.php C:\inetpub\wwwroot\wordpress\wp-config.php
+
+RUN powershell -Command 'Set-ItemProperty IIS:\AppPools\DefaultAppPool -Name processModel.identityType -Value 3'
+RUN powershell -Command 'Restart-WebAppPool DefaultAppPool'
+
+RUN powershell -Command 'New-Item -Path C:\inetpub\wwwroot\wordpress\wp-content\uploads -ItemType Directory -Force'
+
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress /grant "IUSR:(OI)(CI)F" /T'
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress /grant "IIS APPPOOL\DefaultAppPool:(OI)(CI)F" /T'
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress /grant "NetworkService:(OI)(CI)F" /T'
+
+RUN powershell -Command 'New-Item -Path C:\inetpub\wwwroot\wordpress\wp-content\uploads -ItemType Directory -Force'
+
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress\wp-content\uploads /grant "IUSR:(OI)(CI)F" /T'
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress\wp-content\uploads /grant "IIS APPPOOL\DefaultAppPool:(OI)(CI)F" /T'
+RUN powershell -Command 'icacls C:\inetpub\wwwroot\wordpress\wp-content\uploads /grant "NetworkService:(OI)(CI)F" /T'
+
 # Optional: Add a starter page
 # RUN powershell.exe -Command "'<?php phpinfo(); ?>' | Out-File C:\inetpub\wwwroot\index.php -Encoding UTF8"
 
 EXPOSE 80
+
+CMD ["cmd", "/c", "start /w w3svc"]
 
 # Start MariaDB
 # CMD ["C:\\Program Files\\MariaDB 10.6\\bin\\mysqld.exe", "--console"]
