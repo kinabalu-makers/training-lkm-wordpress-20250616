@@ -65,7 +65,7 @@ RUN powershell -Command \
         $fullPath = \"%WORDPRESS_ROOT%$dir\"; \
         if (!(Test-Path $fullPath)) { \
             Write-Host \"Creating directory: $fullPath\"; \
-            New-Item -ItemType Directory -Path $fullPath | Out-Null; \
+            New-Item -ItemType Directory -Path $fullPath -ItemType Directory; \
             if (!(Test-Path $fullPath)) { Write-Error \"Failed to create directory: $fullPath\"; exit 1 } \
         } \
     }; \
