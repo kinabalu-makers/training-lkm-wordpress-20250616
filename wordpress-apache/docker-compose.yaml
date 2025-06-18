@@ -1,0 +1,12 @@
+services:
+  wordpress:
+    image: local/wordpress-apache
+    container_name: cnt-wordpress
+    restart: unless-stopped
+    ports:
+      - "80:80"
+
+networks:
+  default:
+    external: true
+    name: localnet
