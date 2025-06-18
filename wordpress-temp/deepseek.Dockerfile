@@ -94,31 +94,19 @@ RUN powershell -Command \
     # Verify PHP CGI exists \
     if (!(Test-Path \"%PHP_DIR%\php-cgi.exe\")) { Write-Error 'PHP CGI not found'; exit 1 }; \
     \
-    # Configure PHP handler with corrected syntax \
-    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi' -Name '.' -Value @{ \
-        fullPath = \"%PHP_DIR%\php-cgi.exe\"; \
-        arguments = \"\"; \
-        maxInstances = \"4\"; \
-        instanceMaxRequests = \"10000\"; \
-        activityTimeout = \"600\"; \
-        requestTimeout = \"600\"; \
-        queueLength = \"1000\" \
+    # Configure PHP handler with corrected syntax
+    Import-Module WebAdministration; \
+    $fcgiSection = Get-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi'; \
+    $phpCgiPath = "%PHP_DIR%\php-cgi.exe"; \
+    if (-not ($fcgiSection.Collection | Where-Object { $_.fullPath -eq $phpCgiPath })) { \
+        Add-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi' -Value @{ fullPath = $phpCgiPath; arguments = ""; maxInstances = 4 }; \
     }; \
-    \
-    # Configure environment variables for PHP \
-    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi/application[@fullPath=\"%PHP_DIR%\php-cgi.exe\"]/environmentVariables' -Name '.' -Value @{ \
-        name = \"PHP_FCGI_MAX_REQUESTS\"; \
-        value = \"10000\" \
-    }; \
+    Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter "system.webServer/fastCgi/application[@fullPath='$phpCgiPath']/environmentVariables" -Name "." -Value @{name="PHP_FCGI_MAX_REQUESTS";value="10000"}; \
     \
     # Add handler mapping \
-    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/handlers' -Name '.' -Value @{ \
-        name = \"PHP-FastCGI\"; \
-        path = \"*.php\"; \
-        verb = \"*\"; \
-        modules = \"FastCgiModule\"; \
-        scriptProcessor = \"%PHP_DIR%\php-cgi.exe\"; \
-        resourceType = \"Either\" \
+    if (-not (Get-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/handlers' -Name '.' | Where-Object { $_.name -eq "PHP-FastCGI" })) { \
+        Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/handlers' -Name '.' -Value @{ name = "PHP-FastCGI"; path = "*.php"; verb = "*"; modules = "FastCgiModule"; scriptProcessor = $phpCgiPath; resourceType = "Either" \
+        }; \
     }
 
 # Expose port 80
