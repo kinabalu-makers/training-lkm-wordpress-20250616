@@ -80,17 +80,46 @@ RUN powershell -Command \
     Set-Acl \"%WORDPRESS_ROOT%\wp-content\plugins\" $acl; \
     Set-Acl \"%WORDPRESS_ROOT%\wp-content\themes\" $acl
 
-# Install and configure IIS
+# Install and configure IIS with corrected syntax
 RUN powershell -Command \
+    # Install IIS features \
     Install-WindowsFeature Web-Server; \
     Install-WindowsFeature Web-Mgmt-Tools; \
     Install-WindowsFeature Web-Asp-Net45; \
+    \
+    # Configure website \
     Remove-Website -Name 'Default Web Site'; \
     New-Website -Name 'WordPress' -Port 80 -PhysicalPath '%WORDPRESS_ROOT%' -ApplicationPool '.NET v4.5'; \
+    \
+    # Verify PHP CGI exists \
     if (!(Test-Path \"%PHP_DIR%\php-cgi.exe\")) { Write-Error 'PHP CGI not found'; exit 1 }; \
-    New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor \"%PHP_DIR%\php-cgi.exe\" -ResourceType 'File'; \
-    Add-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi' -Name '.' -Value @{'fullPath'=\"%PHP_DIR%\php-cgi.exe\";'activityTimeout'=600;'requestTimeout'=600;'instanceMaxRequests'=10000}; \
-    Set-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.webServer/fastCgi/application[@fullPath=\"\"%PHP_DIR%\php-cgi.exe\"\"]/environmentVariables' -Name '.' -Value @{Name='PHP_FCGI_MAX_REQUESTS';Value='10000'}
+    \
+    # Configure PHP handler with corrected syntax \
+    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi' -Name '.' -Value @{ \
+        fullPath = \"%PHP_DIR%\php-cgi.exe\"; \
+        arguments = \"\"; \
+        maxInstances = \"4\"; \
+        instanceMaxRequests = \"10000\"; \
+        activityTimeout = \"600\"; \
+        requestTimeout = \"600\"; \
+        queueLength = \"1000\" \
+    }; \
+    \
+    # Configure environment variables for PHP \
+    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/fastCgi/application[@fullPath=\"%PHP_DIR%\php-cgi.exe\"]/environmentVariables' -Name '.' -Value @{ \
+        name = \"PHP_FCGI_MAX_REQUESTS\"; \
+        value = \"10000\" \
+    }; \
+    \
+    # Add handler mapping \
+    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/handlers' -Name '.' -Value @{ \
+        name = \"PHP-FastCGI\"; \
+        path = \"*.php\"; \
+        verb = \"*\"; \
+        modules = \"FastCgiModule\"; \
+        scriptProcessor = \"%PHP_DIR%\php-cgi.exe\"; \
+        resourceType = \"Either\" \
+    }
 
 # Expose port 80
 EXPOSE 80
