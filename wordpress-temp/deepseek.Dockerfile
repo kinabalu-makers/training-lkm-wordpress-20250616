@@ -22,32 +22,33 @@ RUN powershell -Command \
     choco install -y unzip; \
     choco install -y vcredist-all
 
-# Configure PHP (using default installation path)
+# Configure PHP
 RUN powershell -Command \
-    # Find PHP directory by checking common locations \
+    # Find PHP directory \
     $phpPath = @('C:\tools\php', 'C:\ProgramData\chocolatey\lib\php\tools\php') | Where-Object { Test-Path $_ } | Select-Object -First 1; \
-    if (-not $phpPath) { throw 'PHP directory not found in expected locations' }; \
+    if (-not $phpPath) { throw 'PHP directory not found' }; \
     Write-Host "Found PHP at: $phpPath"; \
     # Copy production ini to development ini \
     Copy-Item $phpPath\php.ini-production $phpPath\php.ini; \
-    # Enable required extensions \
-    (Get-Content $phpPath\php.ini) -replace ';extension=curl', 'extension=curl' `
-    -replace ';extension=fileinfo', 'extension=fileinfo' `
-    -replace ';extension=mbstring', 'extension=mbstring' `
-    -replace ';extension=mysqli', 'extension=mysqli' `
-    -replace ';extension=openssl', 'extension=openssl' `
-    -replace ';extension=pdo_mysql', 'extension=pdo_mysql' `
-    -replace ';extension=xml', 'extension=xml' `
-    -replace ';extension=zip', 'extension=zip' `
-    -replace ';extension=gd', 'extension=gd' `
-    -replace ';extension=intl', 'extension=intl' `
-    -replace ';extension=exif', 'extension=exif' | Out-File $phpPath\php.ini; \
-    # Configure PHP settings \
-    (Get-Content $phpPath\php.ini) -replace ';date.timezone =', 'date.timezone = UTC' `
-    -replace 'upload_max_filesize = 2M', 'upload_max_filesize = 64M' `
-    -replace 'post_max_size = 8M', 'post_max_size = 64M' `
-    -replace 'max_execution_time = 30', 'max_execution_time = 300' `
-    -replace 'memory_limit = 128M', 'memory_limit = 256M' | Out-File $phpPath\php.ini
+    # Modify php.ini using proper string replacement \
+    $content = [System.IO.File]::ReadAllText("$phpPath\php.ini"); \
+    $content = $content -replace ';extension=curl', 'extension=curl'; \
+    $content = $content -replace ';extension=fileinfo', 'extension=fileinfo'; \
+    $content = $content -replace ';extension=mbstring', 'extension=mbstring'; \
+    $content = $content -replace ';extension=mysqli', 'extension=mysqli'; \
+    $content = $content -replace ';extension=openssl', 'extension=openssl'; \
+    $content = $content -replace ';extension=pdo_mysql', 'extension=pdo_mysql'; \
+    $content = $content -replace ';extension=xml', 'extension=xml'; \
+    $content = $content -replace ';extension=zip', 'extension=zip'; \
+    $content = $content -replace ';extension=gd', 'extension=gd'; \
+    $content = $content -replace ';extension=intl', 'extension=intl'; \
+    $content = $content -replace ';extension=exif', 'extension=exif'; \
+    $content = $content -replace ';date.timezone =', 'date.timezone = UTC'; \
+    $content = $content -replace 'upload_max_filesize = 2M', 'upload_max_filesize = 64M'; \
+    $content = $content -replace 'post_max_size = 8M', 'post_max_size = 64M'; \
+    $content = $content -replace 'max_execution_time = 30', 'max_execution_time = 300'; \
+    $content = $content -replace 'memory_limit = 128M', 'memory_limit = 256M'; \
+    [System.IO.File]::WriteAllText("$phpPath\php.ini", $content)
 
 # Download and install WordPress
 RUN powershell -Command \
@@ -73,7 +74,6 @@ RUN powershell -Command \
     Install-WindowsFeature Web-Asp-Net45; \
     Remove-Website -Name 'Default Web Site'; \
     New-Website -Name 'WordPress' -Port 80 -PhysicalPath 'C:\inetpub\wwwroot\wordpress' -ApplicationPool '.NET v4.5'; \
-    # Find PHP directory again for IIS configuration \
     $phpPath = @('C:\tools\php', 'C:\ProgramData\chocolatey\lib\php\tools\php') | Where-Object { Test-Path $_ } | Select-Object -First 1; \
     if (-not $phpPath) { throw 'PHP directory not found for IIS configuration' }; \
     New-WebHandler -Name 'PHP-FastCGI' -Path '*.php' -Verb '*' -Modules 'FastCgiModule' -ScriptProcessor "$phpPath\php-cgi.exe" -ResourceType 'File'; \
