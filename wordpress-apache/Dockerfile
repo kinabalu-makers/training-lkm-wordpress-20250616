@@ -48,7 +48,7 @@ RUN powershell -Command \
 
 # Create WordPress directories and set permissions
 RUN powershell -Command \
-    New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\uploads" -Force;
+    New-Item -ItemType Directory -Path "C:\Apache\htdocs\wp-content\uploads" -Force;
     # New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\plugins" -Force; \
     # New-Item -ItemType Directory -Path "C:\Apache\htdocs\wordpress\wp-content\themes" -Force;
     # icacls "C:\Apache\htdocs\wordpress" /grant "Everyone:(OI)(CI)F" /T
