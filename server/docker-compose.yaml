@@ -1,0 +1,31 @@
+services:
+  mariadb:
+    image: local/mariadb
+    container_name: cnt-db
+    restart: unless-stopped
+    # volumes:
+    #  - ./mariadb-data:C:\mariadb\data
+
+  phpmyadmin:
+    image: local/phpmyadmin
+    container_name: cnt-pma
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - mariadb
+    
+  wordpress:
+    image: local/wordpress
+    container_name: cnt-wordpress
+    restart: unless-stopped
+    # volumes:
+    #   - ./wordpress-data:C:\Apache\htdocs
+    ports:
+      - "80:80"
+    depends_on:
+      - mariadb
+
+networks:
+  default:
+    name: localnet
